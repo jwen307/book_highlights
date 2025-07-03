@@ -1,36 +1,33 @@
 #!/usr/bin/env python3
 """
-Anki Flashcard Creator for Kindle Highlights
+Anki Helper for Kindle Highlights
 
-This script finds generated markdown files, lets you choose one, and creates
-Anki flashcards using the AnkiConnect API.
+Handles AnkiConnect API and flashcard creation from markdown files.
 """
 
 import os
 import json
 import re
 import requests
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
-from config import ensure_save_directory, DEFAULT_SAVE_LOCATION
+from helpers.config_helper import ensure_save_directory, load_config
+from helpers.models import Book, Highlight
 
 console = Console()
 
-# AnkiConnect API configuration
 ANKI_CONNECT_URL = "http://localhost:8765"
 DEFAULT_DECK_NAME = "Kindle Highlights"
 
-
 class AnkiFlashcardCreator:
     """Creates Anki flashcards from markdown files."""
-    
     def __init__(self):
-        """Initialize the Anki flashcard creator."""
-        self.save_dir = DEFAULT_SAVE_LOCATION
+        config = load_config()
+        self.save_dir = config.get('save_location', ensure_save_directory())
         self.anki_url = ANKI_CONNECT_URL
     
     def find_markdown_files(self) -> List[Path]:

@@ -3,8 +3,8 @@
 Test script for config and save functionality
 """
 
-from config import DEFAULT_SAVE_LOCATION, ensure_save_directory
-from models import Book, Highlight
+from helpers.config_helper import load_config, save_config, ensure_save_directory
+from helpers.models import Book, Highlight
 from datetime import datetime
 import os
 

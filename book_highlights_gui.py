@@ -7,19 +7,20 @@ A simple GUI to tie together summarization and flashcard creation.
 
 import tkinter as tk
 from tkinter import ttk
-from config import load_config, save_config
+from helpers.config_helper import load_config, save_config, ensure_save_directory
 from tkinter import messagebox, filedialog
 import threading
-from kindle_highlights import KindleHighlightsExtractor
-from llm_summarizer import LLMSummarizer
-from config import ensure_save_directory
-from kindle_highlights_with_summary import save_comprehensive_markdown
+from helpers.amazon_helper import KindleHighlightsExtractor
+from helpers.llm_helper import LLMSummarizer
+from helpers.markdown_helper import save_comprehensive_markdown
 import os
 import json
 import re
 import requests
 from pathlib import Path
 from typing import List, Dict, Optional
+from helpers.models import Book, Highlight
+from helpers.anki_helper import AnkiFlashcardCreator
 
 class BookHighlightsApp(tk.Tk):
     def __init__(self):
@@ -157,16 +158,12 @@ class BookHighlightsApp(tk.Tk):
                     self._update_progress(f"Saved summary for '{book.title}'.", idx)
                 else:
                     self._update_progress(f"Failed to summarize '{book.title}'.", idx)
-            
-            # Close browser window after all books are processed
             self._update_progress("Closing browser...", len(selected_books))
             if hasattr(self, 'extractor') and hasattr(self.extractor, 'driver'):
                 self.extractor.driver.quit()
-            
             self._update_progress("All selected books processed successfully!", len(selected_books))
             self.after(0, lambda: self._show_done_page())
         except Exception as e:
-            # Close browser on error too
             if hasattr(self, 'extractor') and hasattr(self.extractor, 'driver'):
                 try:
                     self.extractor.driver.quit()
@@ -255,7 +252,6 @@ class BookHighlightsApp(tk.Tk):
         btn_cancel.pack(side='left', padx=10)
 
     def _create_flashcard_workflow(self):
-        """Start the flashcard creation workflow."""
         for widget in self.winfo_children():
             widget.destroy()
 
@@ -265,8 +261,9 @@ class BookHighlightsApp(tk.Tk):
         instructions = ttk.Label(self, text="Select one or more summarized books to create Anki flashcards.", wraplength=400)
         instructions.pack(pady=(10, 20))
 
-        # Find markdown files
-        md_files = self._find_markdown_files()
+        # Use AnkiFlashcardCreator to find markdown files
+        self.anki_creator = AnkiFlashcardCreator()
+        md_files = self.anki_creator.find_markdown_files()
         if not md_files:
             ttk.Label(self, text="No summarized books found.", foreground="red").pack(pady=20)
             ttk.Label(self, text=f"Save directory: {self.config_data['save_location']}", font=("Helvetica", 10)).pack(pady=5)
@@ -291,41 +288,27 @@ class BookHighlightsApp(tk.Tk):
         self.md_files = md_files
         for i, file_path in enumerate(md_files):
             var = tk.BooleanVar()
-            # Extract book title from filename
             filename = file_path.name
             title = filename.replace('-complete.md', '').replace('_', ' ')
             cb = ttk.Checkbutton(scrollable_frame, text=title, variable=var)
             cb.pack(anchor='w', pady=2)
             self.file_vars.append(var)
 
-        # Create flashcards button
         btn_create = ttk.Button(self, text="Create Flashcards", command=self._create_selected_flashcards)
         btn_create.pack(pady=10)
         btn_cancel = ttk.Button(self, text="Cancel", command=self._create_homepage)
         btn_cancel.pack(pady=5)
 
-        # Progress bar and label
         self.progress_label = ttk.Label(self, text="")
         self.progress_label.pack(pady=5)
         self.progress_bar = ttk.Progressbar(self, mode='determinate', length=300)
         self.progress_bar.pack(pady=5)
 
-    def _find_markdown_files(self) -> List[Path]:
-        """Find all markdown files in the save directory."""
-        md_files = []
-        save_dir = Path(self.config_data['save_location'])
-        for file_path in save_dir.glob("*-complete.md"):
-            if file_path.is_file():
-                md_files.append(file_path)
-        return sorted(md_files)
-
     def _create_selected_flashcards(self):
-        """Create flashcards for selected files."""
         selected_files = [file_path for file_path, var in zip(self.md_files, self.file_vars) if var.get()]
         if not selected_files:
             self.progress_label.config(text="Please select at least one book.")
             return
-
         self.progress_label.config(text="Starting flashcard creation...")
         self.progress_bar['maximum'] = len(selected_files)
         self.progress_bar['value'] = 0
@@ -333,213 +316,34 @@ class BookHighlightsApp(tk.Tk):
         threading.Thread(target=self._create_flashcards_thread, args=(selected_files,), daemon=True).start()
 
     def _create_flashcards_thread(self, selected_files):
-        """Thread to create flashcards for selected files."""
         try:
-            # Test AnkiConnect first
+            # Use AnkiFlashcardCreator for all Anki operations
+            creator = self.anki_creator
             self._update_progress("Testing AnkiConnect connection...", 0)
-            if not self._test_anki_connect():
+            if not creator.test_anki_connect():
                 self._show_error("AnkiConnect is not available. Please make sure Anki is running and the AnkiConnect addon is installed.")
                 return
-
-            # Create deck
-            deck_name = "Kindle Highlights"
+            deck_name = creator.DEFAULT_DECK_NAME if hasattr(creator, 'DEFAULT_DECK_NAME') else "Kindle Highlights"
             self._update_progress("Creating Anki deck...", 0)
-            if not self._create_deck(deck_name):
+            if not creator.create_deck(deck_name):
                 self._show_error("Failed to create Anki deck.")
                 return
-
-            # Process each file
             for idx, file_path in enumerate(selected_files, 1):
                 filename = file_path.name
                 title = filename.replace('-complete.md', '').replace('_', ' ')
                 self._update_progress(f"Processing '{title}' ({idx}/{len(selected_files)})...", idx)
-                
-                # Parse markdown file
-                book_data = self._parse_markdown_file(file_path)
+                book_data = creator.parse_markdown_file(file_path)
                 if not book_data:
                     self._update_progress(f"Failed to parse '{title}'. Skipping.", idx)
                     continue
-
-                # Create flashcard
-                if self._create_flashcard_from_book(book_data, deck_name):
+                if creator.create_flashcards_from_book(book_data):
                     self._update_progress(f"Created flashcard for '{title}'.", idx)
                 else:
                     self._update_progress(f"Failed to create flashcard for '{title}'.", idx)
-
             self._update_progress("All flashcards created successfully!", len(selected_files))
             self.after(0, lambda: self._show_flashcard_done_page())
         except Exception as e:
             self._show_error(f"Error during flashcard creation: {e}")
-
-    def _test_anki_connect(self) -> bool:
-        """Test if AnkiConnect is available."""
-        try:
-            response = requests.post(
-                "http://localhost:8765",
-                json={
-                    "action": "version",
-                    "version": 6
-                },
-                timeout=5
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'result' in result:
-                    return True
-            return False
-        except:
-            return False
-
-    def _create_deck(self, deck_name: str) -> bool:
-        """Create a deck in Anki if it doesn't exist."""
-        try:
-            response = requests.post(
-                "http://localhost:8765",
-                json={
-                    "action": "createDeck",
-                    "version": 6,
-                    "params": {
-                        "deck": deck_name
-                    }
-                }
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'result' in result:
-                    return True
-            return False
-        except:
-            return False
-
-    def _parse_markdown_file(self, file_path: Path) -> Optional[Dict]:
-        """Parse the markdown file to extract book info, summary, key points, and flashcards."""
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Extract book title
-            title_match = re.search(r'^# (.+)$', content, re.MULTILINE)
-            book_title = title_match.group(1) if title_match else "Unknown Book"
-            
-            # Extract author
-            author_match = re.search(r'\*\*Author:\*\* (.+)$', content, re.MULTILINE)
-            author = author_match.group(1) if author_match else "Unknown Author"
-            
-            # Extract ASIN
-            asin_match = re.search(r'\*\*ASIN:\*\* (.+)$', content, re.MULTILINE)
-            asin = asin_match.group(1) if asin_match else None
-            
-            # Extract summary
-            summary_match = re.search(r'\*\*One-Sentence Summary:\*\* (.+)$', content, re.MULTILINE)
-            summary = summary_match.group(1) if summary_match else "No summary available"
-            
-            # Extract key points
-            key_points = []
-            key_points_section = re.search(r'\*\*Key Points:\*\*(.*?)(?=\n\n|\n##|\Z)', content, re.DOTALL)
-            if key_points_section:
-                points_text = key_points_section.group(1)
-                points = re.findall(r'\d+\. (.+?)(?=\n\d+\.|\n\n|\Z)', points_text, re.DOTALL)
-                key_points = [point.strip() for point in points if point.strip()]
-            
-            # Extract flashcards
-            flashcards = []
-            flashcards_section = re.search(r'## 🎯 Flashcards(.*?)(?=\n##|\Z)', content, re.DOTALL)
-            if flashcards_section:
-                flashcard_text = flashcards_section.group(1)
-                qa_pairs = re.findall(r'\*\*Q(\d+):\*\* (.+?)\n\n\*\*A\1:\*\* (.+?)(?=\n\n---|\n\n\*\*Q|\Z)', flashcard_text, re.DOTALL)
-                for _, question, answer in qa_pairs:
-                    flashcards.append({
-                        'question': question.strip(),
-                        'answer': answer.strip()
-                    })
-            
-            return {
-                'book_title': book_title,
-                'author': author,
-                'asin': asin,
-                'summary': summary,
-                'key_points': key_points,
-                'flashcards': flashcards,
-                'file_path': file_path
-            }
-            
-        except Exception as e:
-            return None
-
-    def _create_flashcard_from_book(self, book_data: Dict, deck_name: str) -> bool:
-        """Create a single Anki flashcard for a book."""
-        try:
-            # Prepare back content
-            back_content = []
-            back_content.append(f"<b>Book:</b> {book_data['book_title']}")
-            back_content.append(f"<b>Author:</b> {book_data['author']}")
-            if book_data['asin']:
-                back_content.append(f"<b>ASIN:</b> {book_data['asin']}")
-            back_content.append("")
-            
-            back_content.append("<b>Summary:</b>")
-            back_content.append(book_data['summary'])
-            back_content.append("")
-            
-            if book_data['key_points']:
-                back_content.append("<b>Key Points:</b>")
-                for i, point in enumerate(book_data['key_points'], 1):
-                    back_content.append(f"{i}. {point}")
-                back_content.append("")
-            
-            back_content.append("<b>Answers:</b>")
-            for i, flashcard in enumerate(book_data['flashcards'], 1):
-                back_content.append(f"Q{i}: {flashcard['answer']}")
-            
-            # Join with <br> for Anki HTML rendering
-            back_text = "<br>".join(back_content)
-            
-            # Create front content
-            front_content = []
-            front_content.append(f"<b>{book_data['book_title']}</b>")
-            front_content.append(f"by {book_data['author']}")
-            front_content.append("")
-            front_content.append("<b>Questions:</b>")
-            for i, flashcard in enumerate(book_data['flashcards'], 1):
-                front_content.append(f"Q{i}: {flashcard['question']}")
-            
-            # Join with <br> for Anki HTML rendering
-            front_text = "<br>".join(front_content)
-            
-            # Create the flashcard
-            response = requests.post(
-                "http://localhost:8765",
-                json={
-                    "action": "addNote",
-                    "version": 6,
-                    "params": {
-                        "note": {
-                            "deckName": deck_name,
-                            "modelName": "Basic",
-                            "fields": {
-                                "Front": front_text,
-                                "Back": back_text
-                            },
-                            "options": {
-                                "allowDuplicate": False
-                            },
-                            "tags": ["kindle-highlights"]
-                        }
-                    }
-                }
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'result' in result and result['result'] is not None:
-                    return True
-            
-            return False
-            
-        except Exception as e:
-            return False
 
     def _show_flashcard_done_page(self):
         """Show completion page for flashcard creation."""

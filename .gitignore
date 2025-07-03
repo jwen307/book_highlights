@@ -213,3 +213,6 @@ __marimo__/
 user_config.json
 
 .DS_Store
+
+/dist
+/build

@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
-from create_anki_flashcards import AnkiFlashcardCreator
+from helpers.anki_helper import AnkiFlashcardCreator
 
 console = Console()
 
