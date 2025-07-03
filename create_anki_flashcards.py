@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
-from config import ensure_save_directory
+from config import ensure_save_directory, DEFAULT_SAVE_LOCATION
 
 console = Console()
 
@@ -30,7 +30,7 @@ class AnkiFlashcardCreator:
     
     def __init__(self):
         """Initialize the Anki flashcard creator."""
-        self.save_dir = ensure_save_directory()
+        self.save_dir = DEFAULT_SAVE_LOCATION
         self.anki_url = ANKI_CONNECT_URL
     
     def find_markdown_files(self) -> List[Path]:

@@ -4,17 +4,42 @@ Configuration file for Kindle Highlights Extractor
 """
 
 import os
+import json
 from pathlib import Path
 
-# Default save location for highlights
-# You can modify this to your preferred directory
-DEFAULT_SAVE_LOCATION = os.path.expanduser("~/Documents/KindleHighlights")
+CONFIG_FILE = "user_config.json"
+DEFAULTS = {
+    "save_location": os.path.expanduser("~/Documents/KindleHighlights"),
+    "openai_api_key": "",
+    "openai_model": "gpt-3.5-turbo"
+}
 
-# OpenAI API Configuration
-# Set your OpenAI API key here or use environment variable
-#OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')  # You can set this in your environment
-# Or uncomment and set directly:
-OPENAI_API_KEY = "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"
+def get_config_path():
+    return Path(__file__).parent / CONFIG_FILE
+
+def load_config():
+    path = get_config_path()
+    if path.exists():
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        # Fill in any missing defaults
+        for k, v in DEFAULTS.items():
+            if k not in data:
+                data[k] = v
+        return data
+    else:
+        return DEFAULTS.copy()
+
+def save_config(config):
+    path = get_config_path()
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2)
+
+# Accessors for current config values
+_config = load_config()
+DEFAULT_SAVE_LOCATION = _config['save_location']
+OPENAI_API_KEY = _config['openai_api_key']
+OPENAI_MODEL = _config.get('openai_model', 'gpt-3.5-turbo')
 
 # Create the directory if it doesn't exist
 def ensure_save_directory():
@@ -23,8 +48,12 @@ def ensure_save_directory():
     return DEFAULT_SAVE_LOCATION
 
 def get_openai_api_key() -> str:
-    """Get the OpenAI API key from configuration or environment."""
+    """Get the OpenAI API key from user config."""
     return OPENAI_API_KEY
+
+def get_openai_model() -> str:
+    """Get the OpenAI model from user config."""
+    return OPENAI_MODEL
 
 # Alternative save locations (uncomment and modify as needed)
 # DEFAULT_SAVE_LOCATION = "/Users/username/Documents/Books/Highlights"

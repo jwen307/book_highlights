@@ -12,7 +12,7 @@ from openai import OpenAI
 from rich.console import Console
 from rich.panel import Panel
 from models import Highlight, Book
-from config import get_openai_api_key
+from config import get_openai_api_key, get_openai_model
 
 console = Console()
 
@@ -135,17 +135,15 @@ Please ensure your summary captures the essence of the book, your key points are
         """Generate summary using OpenAI API."""
         try:
             response = self.client.chat.completions.create(
-                model="o4-mini",
+                model=get_openai_model(),
                 messages=[
                     {"role": "system", "content": "You are an expert book analyst who provides concise, insightful summaries and key points."},
                     {"role": "user", "content": prompt}
                 ],
-                #max_completion_tokens=5000,
-                #temperature=0.7
+                max_tokens=1000,
+                temperature=0.7
             )
-            
             return response.choices[0].message.content
-            
         except Exception as e:
             console.print(f"[red]✗ Error calling OpenAI API: {e}[/red]")
             return None
