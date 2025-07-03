@@ -61,6 +61,9 @@ Then, you can select which files you would like turned into an Anki flashcard, a
 python book_highlights_gui.py
 ```
 
+### Set your settings
+- Press the settings button and add you desired save location and OpenAI API key
+
 ### Main Workflows
 
 - **Summarize Book**:  
