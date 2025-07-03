@@ -10,9 +10,10 @@ import os
 from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
-from models import Book, Highlight
-from llm_summarizer import LLMSummarizer
-from config import ensure_save_directory
+from helpers.models import Book, Highlight
+from helpers.config_helper import load_config, save_config, ensure_save_directory
+from helpers.llm_helper import LLMSummarizer
+from helpers.amazon_helper import KindleHighlightsExtractor
 
 console = Console()
 

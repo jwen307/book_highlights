@@ -1,4 +1,4 @@
-from kindle_highlights import KindleHighlightsExtractor
+from helpers.amazon_helper import KindleHighlightsExtractor
 import time
 
 if __name__ == "__main__":

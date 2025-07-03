@@ -10,7 +10,7 @@ from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
 from models import Book, Highlight
-from llm_summarizer import LLMSummarizer
+from helpers.llm_helper import LLMSummarizer
 
 console = Console()
 
