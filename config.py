@@ -6,16 +6,28 @@ Configuration file for Kindle Highlights Extractor
 import os
 import json
 from pathlib import Path
+import sys
 
-CONFIG_FILE = "user_config.json"
+CONFIG_DIR_NAME = ".book_highlights"
+CONFIG_FILENAME = "user_config.json"
+
+def get_config_dir():
+    if sys.platform.startswith("win"):
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+        return Path(base) / "book_highlights"
+    else:
+        return Path(os.path.expanduser(f"~/{CONFIG_DIR_NAME}"))
+
+def get_config_path():
+    config_dir = get_config_dir()
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir / CONFIG_FILENAME
+
 DEFAULTS = {
     "save_location": os.path.expanduser("~/Documents/KindleHighlights"),
     "openai_api_key": "",
     "openai_model": "gpt-3.5-turbo"
 }
-
-def get_config_path():
-    return Path(__file__).parent / CONFIG_FILE
 
 def load_config():
     path = get_config_path()
